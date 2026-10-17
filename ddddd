@@ -1,0 +1,59 @@
+local DEBUG = false -- true = แสดง log ใน console, false = เงียบสนิท
+
+local endpoint = "https://panora-collector.xnoallnw.workers.dev/usage"
+
+local http = game:GetService("HttpService")
+local player = game:GetService("Players").LocalPlayer
+local send = (syn and syn.request) or http_request or request
+
+if type(send) ~= "function" then
+    if DEBUG then warn("[test] executor ไม่รองรับ HTTP request") end
+    return
+end
+
+local session = http:GenerateGUID(false)
+local started = false
+local running = true
+
+getgenv().stopUsageTest = function()
+    running = false
+    if DEBUG then print("[test] stopped") end
+end
+
+task.spawn(function()
+    while running do
+        local event = started and "heartbeat" or "start"
+
+        local ok, response = pcall(function()
+            return send({
+                Url = endpoint,
+                Method = "POST",
+                Timeout = 10,
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = http:JSONEncode({
+                    userId = player.UserId,
+                    username = player.Name,
+                    placeId = game.PlaceId,
+                    gameName = "My Anime Mine",
+                    version = "1.0",
+                    sessionId = session,
+                    event = event,
+                    consent = true,
+                }),
+            })
+        end)
+
+        if ok and response then
+            local code = tonumber(response.StatusCode or response.Status)
+            if code == 200 then
+                started = true
+            elseif DEBUG then
+                warn("[test]", event, "->", code)
+            end
+        elseif DEBUG then
+            warn("[test] request error:", response)
+        end
+
+        task.wait(60)
+    end
+end)
